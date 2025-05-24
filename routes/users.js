@@ -15,60 +15,49 @@ dotenv.config({ path: "./.env" });
 // const { exec } = require("child_process");
 
 // New Account
+
 router.post("/", newUserValidation, async (req, res) => {
 	var { fname, lname, username, password, contacts } = req.body;
 	if (fname.length < 3) {
-		return res
-			.status(500)
-			.json({
-				message: `الاسم قصير جدا، يجب أن لا يقل عن 3 أحرف`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `الاسم قصير جدا، يجب أن لا يقل عن 3 أحرف`,
+			status: "fail",
+		});
 	}
 
 	if (lname.length < 3) {
-		return res
-			.status(500)
-			.json({
-				message: `اللقب قصير جدا، يجب أن لا يقل عن 3 أحرف`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `اللقب قصير جدا، يجب أن لا يقل عن 3 أحرف`,
+			status: "fail",
+		});
 	}
 
 	if (username.length < 6) {
-		return res
-			.status(500)
-			.json({
-				message: `اسم المستخدم قصير جدا، يجب أن لا يقل اسم المستخدم عن 6 خانات`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `اسم المستخدم قصير جدا، يجب أن لا يقل اسم المستخدم عن 6 خانات`,
+			status: "fail",
+		});
 	}
 
 	if (username.length > 14) {
-		return res
-			.status(500)
-			.json({
-				message: `اسم المستخدم طويل جدا، يجب أن لا يزيد اسم المستخدم عن 14 خانة`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `اسم المستخدم طويل جدا، يجب أن لا يزيد اسم المستخدم عن 14 خانة`,
+			status: "fail",
+		});
 	}
 
 	if (password.length < 10) {
-		return res
-			.status(500)
-			.json({
-				message: `كلمة المرور قصيرة جدا، يجب أن لا تقل كلمة المرور عن 10 خانات`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `كلمة المرور قصيرة جدا، يجب أن لا تقل كلمة المرور عن 10 خانات`,
+			status: "fail",
+		});
 	}
 
 	if (password.length > 18) {
-		return res
-			.status(500)
-			.json({
-				message: `كلمة المرور طويلة جدا، يجب أن لا تزيد كلمة المرور عن 18 خانة`,
-				status: "fail",
-			});
+		return res.status(500).json({
+			message: `كلمة المرور طويلة جدا، يجب أن لا تزيد كلمة المرور عن 18 خانة`,
+			status: "fail",
+		});
 	}
 
 	if (contacts == undefined) {
@@ -108,13 +97,11 @@ router.get("/:id", async (req, res) => {
 			`SELECT _firstName_ AS 'first_name', _lastName_ AS 'last_name', _username_ AS 'Username', _contacts_ AS 'Contacts' FROM USERS WHERE __id__ = '${id}'`
 		);
 		// console.log(user[0]);
-		res
-			.status(201)
-			.json({
-				message: "تم استرجاع البيانات بنجاح",
-				status: "success",
-				data: user[0],
-			});
+		res.status(201).json({
+			message: "تم استرجاع البيانات بنجاح",
+			status: "success",
+			data: user[0],
+		});
 	} catch (error) {
 		console.log(error);
 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
