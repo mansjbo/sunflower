@@ -20,6 +20,7 @@ app.use("/items", require("./routes/items.js"));
 app.use("/suppliers", require("./routes/suppliers.js"));
 app.use("/supplies", require("./routes/supplies.js"));
 app.use("/sales", require("./routes/sales.js"));
+app.use("/test", require("./routes/testapi"));
 // app.get('/', (req,res)=>{
 //     console.log("Requesting.....");
 //     res.status(201).send("Successfully Requested hhhhhhhhhh")
