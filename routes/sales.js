@@ -3,15 +3,15 @@ const router = express.Router();
 const pool = require("../config/db");
 const crypto = require("crypto");
 const {
-	tokenAuth,
-	// validateItem,
-	// validateDate,
+  tokenAuth,
+  // validateItem,
+  // validateDate,
 } = require("../config/middleware");
 const {
-	getTimestamp,
-	getCount,
-	str_pad,
-	paginateData,
+  getTimestamp,
+  getCount,
+  str_pad,
+  paginateData,
 } = require("../config/lab");
 const bcrypt = require("bcrypt");
 const { format } = require("date-fns");
@@ -24,348 +24,346 @@ const { ObjectId } = require("mongodb");
 let db;
 
 connectToDb((err) => {
-	if (!err) {
-		db = getDb();
-	}
+  if (!err) {
+    db = getDb();
+  }
 });
 
 // Helper Functions
 const validateItem = async (item) => {
-	try {
-		const foundItem = await db.collection("items").findOne({
-			_id: new ObjectId(item.id),
-			"units.unit_title": item.unit,
-		});
-		return foundItem !== null;
-	} catch (error) {
-		console.error("Error validating item:", error);
-		return false;
-	}
+  try {
+    const foundItem = await db.collection("items").findOne({
+      _id: new ObjectId(item.id),
+      "units.unit_title": item.unit,
+    });
+    return foundItem !== null;
+  } catch (error) {
+    console.error("Error validating item:", error);
+    return false;
+  }
 };
 
 const validateDate = (dateString) => {
-	return moment(dateString, "YYYY-MM-DD", true).isValid();
+  return moment(dateString, "YYYY-MM-DD", true).isValid();
 };
 
 // 1. Create New Invoice
 router.post("/", tokenAuth, async (req, res) => {
-	try {
-		const {
-			"cus-name": cusName,
-			mobile,
-			"invoice-date": date,
-			items,
-		} = req.body;
+  try {
+    const {
+      "cus-name": cusName,
+      mobile,
+      "invoice-date": date,
+      items,
+    } = req.body;
 
-		if (items.length <= 0) {
-			return res
-				.status(400)
-				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
-		}
+    if (items.length <= 0) {
+      return res
+        .status(400)
+        .json({ message: "لا يوجد أصناف كافية", status: "fail" });
+    }
 
-		if (!validateDate(date)) {
-			return res
-				.status(400)
-				.json({ message: "خطأ في التاريخ", status: "fail" });
-		}
+    if (!validateDate(date)) {
+      return res
+        .status(400)
+        .json({ message: "خطأ في التاريخ", status: "fail" });
+    }
 
-		for (const [index, item] of items.entries()) {
-			if (!(await validateItem(item))) {
-				return res.status(400).json({
-					message: `الصنف رقم ${index + 1} غير صحيح`,
-					status: "fail",
-				});
-			}
-		}
+    for (const [index, item] of items.entries()) {
+      if (!(await validateItem(item))) {
+        return res.status(400).json({
+          message: `الصنف رقم ${index + 1} غير صحيح`,
+          status: "fail",
+        });
+      }
+    }
 
-		var orderStatus = 1;
-		const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-		const todayEnd = new Date(new Date().setHours(23, 59, 59, 999));
+    var orderStatus = 1;
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const todayEnd = new Date(new Date().setHours(23, 59, 59, 999));
 
-		const count = await db.collection("invoices").countDocuments({
-			createdAt: { $gte: todayStart, $lt: todayEnd },
-		});
-		const code = (count + 1).toString().padStart(6, "0");
+    const count = await db.collection("invoices").countDocuments({
+      createdAt: { $gte: todayStart, $lt: todayEnd },
+    });
+    const code = (count + 1).toString().padStart(6, "0");
 
-		const newInvoice = {
-			_id: new ObjectId(),
-			code,
-			date: new Date(date),
-			customer: cusName,
-			mobile,
-			items,
-			orderStatus,
-			total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
-			status: 1,
-			createdAt: new Date(),
-			createdBy: req.obj.user.__id__,
-		};
+    const newInvoice = {
+      _id: new ObjectId(),
+      code,
+      date: new Date(date),
+      customer: cusName,
+      mobile,
+      items,
+      orderStatus,
+      total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+      status: 1,
+      createdAt: new Date(),
+      createdBy: req.obj.user.__id__,
+    };
 
-		await db.collection("invoices").insertOne(newInvoice);
+    await db.collection("invoices").insertOne(newInvoice);
 
-		res.status(201).json({
-			message: "تم إنشاء الفاتورة بنجاح",
-			status: "success",
-			data: { id: newInvoice._id, code: newInvoice.code },
-		});
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    res.status(201).json({
+      message: "تم إنشاء الفاتورة بنجاح",
+      status: "success",
+      data: { id: newInvoice._id, code: newInvoice.code },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 // 2. Get Invoices List
 router.get("/", tokenAuth, async (req, res) => {
-	try {
-		const page = parseInt(req.query.page) || 1;
-		const limit = parseInt(req.query.limit) || 10;
-		const txt = req.query.txt || "";
-		const skip = (page - 1) * limit;
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const txt = req.query.txt || "";
+    const skip = (page - 1) * limit;
 
-		const arabicRegex = txt.replace(/[إأآ]/g, "ا").replace(/[ىئ]/g, "ي");
-		const regex = new RegExp(arabicRegex, "i");
+    const arabicRegex = txt.replace(/[إأآ]/g, "ا").replace(/[ىئ]/g, "ي");
+    const regex = new RegExp(arabicRegex, "i");
 
-		const countPipeline = [
-			{
-				$match: {
-					$or: [
-						{ code: { $regex: regex } },
-						{ customer: { $regex: regex } },
-						{ mobile: { $regex: regex } },
-						{ total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
-					],
-					status: 1,
-				},
-			},
-			{ $count: "total" },
-		];
+    const countPipeline = [
+      {
+        $match: {
+          $or: [
+            { code: { $regex: regex } },
+            { customer: { $regex: regex } },
+            { mobile: { $regex: regex } },
+            { total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
+          ],
+          status: 1,
+        },
+      },
+      { $count: "total" },
+    ];
 
-		const countResult = await db
-			.collection("invoices")
-			.aggregate(countPipeline)
-			.toArray();
-		const total = countResult[0]?.total || 0;
-		const pages_count = Math.ceil(total / limit);
+    const countResult = await db
+      .collection("invoices")
+      .aggregate(countPipeline)
+      .toArray();
+    const total = countResult[0]?.total || 0;
+    const pages_count = Math.ceil(total / limit);
 
-		const invoices = await db
-			.collection("invoices")
-			.aggregate([
-				{
-					$match: {
-						$or: [
-							{ code: { $regex: regex } },
-							{ customer: { $regex: regex } },
-							{ mobile: { $regex: regex } },
-							{ total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
-						],
-						status: 1,
-					},
-				},
-				{
-					$project: {
-						_id: 1,
-						code: 1,
-						date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-						customer: 1,
-						mobile: 1,
-						total: 1,
-						orderStatus: 1, // Keep the original numeric field
-						orderStatusText: {
-							// Add new field with Arabic text
-							$switch: {
-								branches: [
-									{ case: { $eq: ["$orderStatus", 1] }, then: "قيد التجهيز" },
-									{ case: { $eq: ["$orderStatus", 2] }, then: "جاهز للسحن" },
-									{ case: { $eq: ["$orderStatus", 3] }, then: "قيد الشحن" },
-									{ case: { $eq: ["$orderStatus", 4] }, then: "تم التسليم" },
-									{
-										case: { $eq: ["$orderStatus", 5] },
-										then: "تم الغاء الطلبية",
-									},
-								],
-								default: "غير معرف",
-							},
-						},
-					},
-				},
-				{ $skip: skip },
-				{ $limit: limit },
-			])
-			.toArray();
+    const invoices = await db
+      .collection("invoices")
+      .aggregate([
+        {
+          $match: {
+            $or: [
+              { code: { $regex: regex } },
+              { customer: { $regex: regex } },
+              { mobile: { $regex: regex } },
+              { total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
+            ],
+            status: 1,
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            code: 1,
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+            customer: 1,
+            mobile: 1,
+            total: 1,
+            orderStatus: 1, // Keep the original numeric field
+            orderStatusText: {
+              // Add new field with Arabic text
+              $switch: {
+                branches: [
+                  { case: { $eq: ["$orderStatus", 1] }, then: "قيد التجهيز" },
+                  { case: { $eq: ["$orderStatus", 2] }, then: "جاهز للسحن" },
+                  { case: { $eq: ["$orderStatus", 3] }, then: "قيد الشحن" },
+                  { case: { $eq: ["$orderStatus", 4] }, then: "تم التسليم" },
+                  {
+                    case: { $eq: ["$orderStatus", 5] },
+                    then: "تم الغاء الطلبية",
+                  },
+                ],
+                default: "غير معرف",
+              },
+            },
+          },
+        },
+        { $skip: skip },
+        { $limit: limit },
+      ])
+      .toArray();
 
-		res.status(200).json({
-			data: invoices,
-			meta: { pages_count, results_count: total },
-			status: "success",
-		});
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    res.status(200).json({
+      data: invoices,
+      meta: { pages_count, results_count: total },
+      status: "success",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 // 3. Get Invoice Details
 router.get("/:id", tokenAuth, async (req, res) => {
-	try {
-		const invoice = await db.collection("invoices").findOne({
-			_id: new ObjectId(req.params.id),
-			status: 1,
-		});
+  try {
+    const invoice = await db.collection("invoices").findOne({
+      _id: new ObjectId(req.params.id),
+      status: 1,
+    });
 
-		if (!invoice) {
-			return res
-				.status(404)
-				.json({ message: "لا يوجد بيانات متاحة", status: "fail" });
-		}
+    if (!invoice) {
+      return res
+        .status(404)
+        .json({ message: "لا يوجد بيانات متاحة", status: "fail" });
+    }
 
-		res.status(200).json({
-			data: {
-				basics: {
-					_id: invoice._id,
-					code: invoice.code,
-					date: invoice.date,
-					customer: invoice.customer,
-					mobile: invoice.mobile,
-					orderStatus: invoice.orderStatus,
-					total: invoice.total,
-				},
-				details: invoice.items,
-			},
-			status: "success",
-		});
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    // Format the date to YYYY-mm-dd
+    let formattedDate = "";
+    if (invoice.date) {
+      const dateObj =
+        invoice.date instanceof Date ? invoice.date : new Date(invoice.date);
+      formattedDate = dateObj.toISOString().split("T")[0];
+    }
+
+    res.status(200).json({
+      data: {
+        basics: {
+          _id: invoice._id,
+          code: invoice.code,
+          date: formattedDate, // Use the formatted date here
+          customer: invoice.customer,
+          mobile: invoice.mobile,
+          orderStatus: invoice.orderStatus,
+          total: invoice.total,
+        },
+        details: invoice.items,
+      },
+      status: "success",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 // 4. Update Invoice
 router.put("/:id", tokenAuth, async (req, res) => {
-	try {
-		const {
-			"cus-name": cusName,
-			mobile,
-			"invoice-date": date,
-			items,
-		} = req.body;
+  try {
+    const {
+      "cus-name": cusName,
+      mobile,
+      "invoice-date": date,
+      items,
+    } = req.body;
 
-		if (items.length <= 0) {
-			return res
-				.status(400)
-				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
-		}
+    // ... (keep your existing validation code)
 
-		if (!validateDate(date)) {
-			return res
-				.status(400)
-				.json({ message: "خطأ في التاريخ", status: "fail" });
-		}
+    const updateData = {
+      $set: {
+        customer: cusName,
+        mobile,
+        date: new Date(date),
+        items,
+        total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+      },
+      // This will create the array if it doesn't exist
+      $push: {
+        updates: {
+          $each: [
+            {
+              user: req.obj.user.__id__,
+              updatedAt: new Date(),
+            },
+          ],
+          // Initialize as empty array if field doesn't exist
+          $position: 0,
+        },
+      },
+    };
 
-		for (const [index, item] of items.entries()) {
-			if (!(await validateItem(item))) {
-				return res.status(400).json({
-					message: `الصنف رقم ${index + 1} غير صحيح`,
-					status: "fail",
-				});
-			}
-		}
+    const result = await db
+      .collection("invoices")
+      .updateOne({ _id: new ObjectId(req.params.id) }, updateData);
 
-		const updateData = {
-			customer: cusName,
-			mobile,
-			date: new Date(date),
-			items,
-			total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
-			$push: {
-				"config.updates": {
-					user: new ObjectId(req.obj.user.__id__),
-					updatedAt: new Date(),
-				},
-			},
-		};
+    if (result.matchedCount === 0) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "الفاتورة غير موجودة" });
+    }
 
-		const result = await db
-			.collection("invoices")
-			.updateOne({ _id: new ObjectId(req.params.id) }, { $set: updateData });
-
-		if (result.matchedCount === 0) {
-			return res
-				.status(404)
-				.json({ status: "fail", message: "الفاتورة غير موجودة" });
-		}
-
-		res
-			.status(200)
-			.json({ status: "success", message: "تم تحديث الفاتورة بنجاح" });
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    res
+      .status(200)
+      .json({ status: "success", message: "تم تحديث الفاتورة بنجاح" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 // 5. Update Invoice Status
 router.put("/status/:id", tokenAuth, async (req, res) => {
-	try {
-		const { status } = req.body;
+  try {
+    const { status } = req.body;
 
-		const result = await db.collection("invoices").updateOne(
-			{ _id: new ObjectId(req.params.id) },
-			{
-				$set: { orderStatus: parseInt(status) },
-				$push: {
-					statusUpdates: {
-						user: req.obj.user.__id__,
-						updatedAt: getTimestamp(),
-						newStatus: parseInt(status),
-					},
-				},
-			}
-		);
+    const result = await db.collection("invoices").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      {
+        $set: { orderStatus: parseInt(status) },
+        $push: {
+          statusUpdates: {
+            user: req.obj.user.__id__,
+            updatedAt: getTimestamp(),
+            newStatus: parseInt(status),
+          },
+        },
+      }
+    );
 
-		if (result.matchedCount === 0) {
-			return res
-				.status(404)
-				.json({ status: "fail", message: "الفاتورة غير موجودة" });
-		}
+    if (result.matchedCount === 0) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "الفاتورة غير موجودة" });
+    }
 
-		res
-			.status(200)
-			.json({ status: "success", message: "تم تحديث حالة الفاتورة بنجاح" });
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    res
+      .status(200)
+      .json({ status: "success", message: "تم تحديث حالة الفاتورة بنجاح" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 // 6. Delete Invoice
 router.delete("/:id", tokenAuth, async (req, res) => {
-	try {
-		const result = await db.collection("invoices").updateOne(
-			{ _id: new ObjectId(req.params.id) },
-			{
-				$set: { status: 0 },
-				$push: {
-					"config.deletes": {
-						user: new ObjectId(req.obj.user.__id__),
-						deletedAt: new Date(),
-					},
-				},
-			}
-		);
+  try {
+    const result = await db.collection("invoices").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      {
+        $set: { status: 0 },
+        $push: {
+          deletes: {
+            user: req.obj.user.__id__,
+            deletedAt: getTimestamp(),
+          },
+        },
+      }
+    );
 
-		if (result.matchedCount === 0) {
-			return res
-				.status(404)
-				.json({ status: "fail", message: "الفاتورة غير موجودة" });
-		}
+    if (result.matchedCount === 0) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "الفاتورة غير موجودة" });
+    }
 
-		res
-			.status(200)
-			.json({ status: "success", message: "تم حذف الفاتورة بنجاح" });
-	} catch (error) {
-		console.error(error);
-		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-	}
+    res
+      .status(200)
+      .json({ status: "success", message: "تم حذف الفاتورة بنجاح" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+  }
 });
 
 module.exports = router;
