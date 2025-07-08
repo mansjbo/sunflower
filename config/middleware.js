@@ -7,7 +7,17 @@ const fs = require("fs");
 const path = require("path");
 const { bitToBoolean } = require("../config/lab");
 // const dotenv = require('dotenv')
+const { getDb, connectToDb } = require("./mongo");
+const { ObjectId } = require("mongodb");
 
+// db connection
+let db;
+
+connectToDb((err) => {
+	if (!err) {
+		db = getDb();
+	}
+});
 const tokenAuth = (req, res, next) => {
 	try {
 		const authHeader = req.headers.authorization;
@@ -30,9 +40,14 @@ const tokenAuth = (req, res, next) => {
 };
 
 const loginAuth = async (req, res, next) => {
-	// console.log(req.body);
+	console.log(req.body);
 	try {
 		if (req.body.username.length > 0 && req.body.password.length > 0) {
+			console.log(
+				"SELECT __id__, _username_, _password_ FROM USERS WHERE _username_ = '" +
+					req.body.username +
+					"' AND _status_ = 1"
+			);
 			const userExist = await pool.query(
 				"SELECT __id__, _username_, _password_ FROM USERS WHERE _username_ = '" +
 					req.body.username +
@@ -40,8 +55,9 @@ const loginAuth = async (req, res, next) => {
 			);
 
 			// const [permissions] = await pool.query(`SELECT * FROM PERMISSIONS up WHERE up.__id__ = '${userExist[0].__id__}'`)
-
+			console.log("object2");
 			if (userExist[0].length > 0) {
+				console.log("object3");
 				const isValid = await bcrypt.compare(
 					req.body.password,
 					userExist[0][0]._password_
@@ -54,6 +70,7 @@ const loginAuth = async (req, res, next) => {
 					req.permissions = perms;
 					next();
 				} else {
+					console.log("object4");
 					return res
 						.status(400)
 						.json({ message: "فشل عملية تسجيل الدخول", status: "fail" });
@@ -111,18 +128,51 @@ const validateCategory = async (id) => {
 };
 
 const validateBrand = async (id) => {
-	const [brand] = await pool.query(
-		`SELECT * FROM BRAND c WHERE c.__id__ = '${id}'`
-	);
-	return brand.length == 1;
+	try {
+		// Convert string ID to ObjectId if needed
+		const brandId = ObjectId.isValid(id) ? new ObjectId(id) : id;
+
+		const brand = await db.collection("brands").findOne({
+			_id: brandId,
+		});
+
+		return brand !== null;
+	} catch (error) {
+		console.error("Error validating brand:", error);
+		return false;
+	}
 };
 
 const validateItem = async (item) => {
-	const [itemFound] = await pool.query(
-		`SELECT * FROM ITEM i WHERE i.__id__ = '${item.id}' AND JSON_CONTAINS(_units_, JSON_OBJECT('unit_title', '${item.unit}'));`
-	);
-	return itemFound.length == 1;
+	try {
+		// Convert string ID to ObjectId if needed
+		const itemId = ObjectId.isValid(item.id) ? new ObjectId(item.id) : item.id;
+
+		const itemFound = await db.collection("items").findOne({
+			_id: itemId,
+			"units.unit_title": item.unit,
+		});
+
+		return itemFound !== null;
+	} catch (error) {
+		console.error("Error validating item:", error);
+		return false;
+	}
 };
+
+// const validateBrand = async (id) => {
+//   const [brand] = await pool.query(
+//     `SELECT * FROM BRAND c WHERE c.__id__ = '${id}'`
+//   );
+//   return brand.length == 1;
+// };
+
+// const validateItem = async (item) => {
+//   const [itemFound] = await pool.query(
+//     `SELECT * FROM ITEM i WHERE i.__id__ = '${item.id}' AND JSON_CONTAINS(_units_, JSON_OBJECT('unit_title', '${item.unit}'));`
+//   );
+//   return itemFound.length == 1;
+// };
 
 /**
  * Validates if the given string is a valid date.
