@@ -368,317 +368,317 @@ router.delete("/:id", tokenAuth, async (req, res) => {
 
 module.exports = router;
 
-// // New Invoice
-// router.post("/", tokenAuth, async (req, res) => {
-// 	try {
-// 		const {
-// 			"cus-name": cusName,
-// 			mobile,
-// 			"invoice-date": date,
-// 			items,
-// 			orderStatus,
-// 		} = req.body;
+// New Invoice
+router.post("/", tokenAuth, async (req, res) => {
+	try {
+		const {
+			"cus-name": cusName,
+			mobile,
+			"invoice-date": date,
+			items,
+			orderStatus,
+		} = req.body;
 
-// 		if (items.length <= 0) {
-// 			return res
-// 				.status(500)
-// 				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
-// 		}
+		if (items.length <= 0) {
+			return res
+				.status(500)
+				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
+		}
 
-// 		if (!validateDate(date)) {
-// 			return res
-// 				.status(400)
-// 				.json({ message: "خطأ في التاريخ", status: "fail" });
-// 		}
+		if (!validateDate(date)) {
+			return res
+				.status(400)
+				.json({ message: "خطأ في التاريخ", status: "fail" });
+		}
 
-// 		for (const [index, item] of items.entries()) {
-// 			if (!validateItem(item)) {
-// 				return res.status(500).json({
-// 					message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`,
-// 					status: "fail",
-// 				});
-// 			}
-// 		}
+		for (const [index, item] of items.entries()) {
+			if (!validateItem(item)) {
+				return res.status(500).json({
+					message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`,
+					status: "fail",
+				});
+			}
+		}
 
-// 		const id = crypto.randomBytes(10).toString("hex");
-// 		const parsedDate = moment(getTimestamp());
-// 		var fullDate = parsedDate.format("YYYY-MM-DD");
+		const id = crypto.randomBytes(10).toString("hex");
+		const parsedDate = moment(getTimestamp());
+		var fullDate = parsedDate.format("YYYY-MM-DD");
 
-// 		const count = await pool.query(
-// 			`SELECT COUNT(*) AS count FROM POS p WHERE DATE(JSON_EXTRACT(p._config_, '$.createdAt')) = '${fullDate}'`
-// 		);
-// 		var code = str_pad(count[0][0]["count"] + 1, 6, "0", "left");
+		const count = await pool.query(
+			`SELECT COUNT(*) AS count FROM POS p WHERE DATE(JSON_EXTRACT(p._config_, '$.createdAt')) = '${fullDate}'`
+		);
+		var code = str_pad(count[0][0]["count"] + 1, 6, "0", "left");
 
-// 		const sql = `
-//             INSERT INTO POS (__id__, _code_, _date_, _customer_, _mobile_, _items_, _order_status_ _config_)
-//             VALUES ('${id}', '${code}', '${date}', '${cusName}', '${mobile}', '${JSON.stringify(
-// 			items
-// 		)}', '${orderStatus}', '${JSON.stringify({
-// 			createdAt: getTimestamp(),
-// 			createdBy: req.obj.user.__id__,
-// 		})}')
-//         `;
-// 		const [insert] = await pool.query(sql);
+		const sql = `
+            INSERT INTO POS (__id__, _code_, _date_, _customer_, _mobile_, _items_, _order_status_ _config_)
+            VALUES ('${id}', '${code}', '${date}', '${cusName}', '${mobile}', '${JSON.stringify(
+			items
+		)}', '${orderStatus}', '${JSON.stringify({
+			createdAt: getTimestamp(),
+			createdBy: req.obj.user.__id__,
+		})}')
+        `;
+		const [insert] = await pool.query(sql);
 
-// 		res
-// 			.status(201)
-// 			.json({ message: "تم حفظ ييانات الصنف بنجاح", status: "success" });
-// 	} catch (error) {
-// 		console.log(error);
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		res
+			.status(201)
+			.json({ message: "تم حفظ ييانات الصنف بنجاح", status: "success" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
-// // Invoices List
-// router.get("/", tokenAuth, async (req, res) => {
-// 	try {
-// 		const page = parseInt(req.query.page) || 1;
-// 		const limit = parseInt(req.query.limit) || 10;
-// 		const txt = req.query.txt || "";
+// Invoices List
+router.get("/", tokenAuth, async (req, res) => {
+	try {
+		const page = parseInt(req.query.page) || 1;
+		const limit = parseInt(req.query.limit) || 10;
+		const txt = req.query.txt || "";
 
-// 		const sql = `SELECT i.__id__, i._code_, DATE_FORMAT(i._date_, '%Y-%m-%d') AS _date_, i._customer_, i._mobile_, i.orderStatus, i._order_status_, i.total FROM INVOICES i
+		const sql = `SELECT i.__id__, i._code_, DATE_FORMAT(i._date_, '%Y-%m-%d') AS _date_, i._customer_, i._mobile_, i.orderStatus, i._order_status_, i.total FROM INVOICES i
 
-//             WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._code_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._date_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._mobile_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._customer_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR i.total = '${txt}'
-//             )
-//            `;
+            WHERE (REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._code_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
+            OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._date_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
+            OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._mobile_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
+            OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._customer_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
+            OR i.total = '${txt}'
+            )
+           `;
 
-// 		const [invoices] = await pool.query(sql);
-// 		if (invoices.length > 0) {
-// 			const data = paginateData(invoices, page, limit);
-// 			return res.status(201).json({ ...data, status: "success" });
-// 		} else {
-// 			return res.status(200).json({
-// 				data: [],
-// 				meta: {},
-// 				message: "لا يوجد بيانات متاحة",
-// 				status: "fail",
-// 			});
-// 		}
-// 	} catch (error) {
-// 		console.log(error);
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		const [invoices] = await pool.query(sql);
+		if (invoices.length > 0) {
+			const data = paginateData(invoices, page, limit);
+			return res.status(201).json({ ...data, status: "success" });
+		} else {
+			return res.status(200).json({
+				data: [],
+				meta: {},
+				message: "لا يوجد بيانات متاحة",
+				status: "fail",
+			});
+		}
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
-// // router.get("/invoice", async(req, res)=>{
+// router.get("/invoice", async(req, res)=>{
 
-// //     res.status(200).send(code)
-// // })
+//     res.status(200).send(code)
+// })
 
-// // Get Invoice Details
-// router.get("/:id", tokenAuth, async (req, res) => {
-// 	try {
-// 		const [basics] = await pool.query(
-// 			`SELECT i.__id__, i._code_, i._date_, i._customer_, i._mobile_, i.orderStatus, i._order_status_, i.total FROM INVOICES i WHERE i.__id__ = '${req.params.id}'`
-// 		);
-// 		const [details] = await pool.query(
-// 			`SELECT
-// 				item.*
-// 			FROM POS p
-// 			JOIN JSON_TABLE(
-// 				p._items_,
-// 				'$[*]' COLUMNS (
-// 					id VARCHAR(255) PATH '$.id',
-// 					title VARCHAR(255) PATH '$.title',
-// 					unit VARCHAR(255) PATH '$.unit',
-// 					price DECIMAL(10, 2) PATH '$.price',
-// 					discount DECIMAL(10, 2) PATH '$.discount',
-// 					quantity INT PATH '$.quantity'
-// 				)
-// 			) AS item
-// 			ON 1=1
-// 			WHERE p.__id__ = '${req.params.id}';`
-// 		);
+// Get Invoice Details
+router.get("/:id", tokenAuth, async (req, res) => {
+	try {
+		const [basics] = await pool.query(
+			`SELECT i.__id__, i._code_, i._date_, i._customer_, i._mobile_, i.orderStatus, i._order_status_, i.total FROM INVOICES i WHERE i.__id__ = '${req.params.id}'`
+		);
+		const [details] = await pool.query(
+			`SELECT
+				item.*
+			FROM POS p
+			JOIN JSON_TABLE(
+				p._items_,
+				'$[*]' COLUMNS (
+					id VARCHAR(255) PATH '$.id',
+					title VARCHAR(255) PATH '$.title',
+					unit VARCHAR(255) PATH '$.unit',
+					price DECIMAL(10, 2) PATH '$.price',
+					discount DECIMAL(10, 2) PATH '$.discount',
+					quantity INT PATH '$.quantity'
+				)
+			) AS item
+			ON 1=1
+			WHERE p.__id__ = '${req.params.id}';`
+		);
 
-// 		if (basics.length > 0) {
-// 			return res.status(201).json({
-// 				data: { basics: basics[0], details: details },
-// 				status: "success",
-// 			});
-// 		} else {
-// 			return res
-// 				.status(204)
-// 				.json({ message: "لا يوجد بيانات متاحة", status: "fail" });
-// 		}
-// 	} catch (error) {
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		if (basics.length > 0) {
+			return res.status(201).json({
+				data: { basics: basics[0], details: details },
+				status: "success",
+			});
+		} else {
+			return res
+				.status(204)
+				.json({ message: "لا يوجد بيانات متاحة", status: "fail" });
+		}
+	} catch (error) {
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
-// router.put("/:id", tokenAuth, async (req, res) => {
-// 	try {
-// 		const {
-// 			"cus-name": cusName,
-// 			mobile,
-// 			"invoice-date": date,
-// 			items,
-// 		} = req.body;
+router.put("/:id", tokenAuth, async (req, res) => {
+	try {
+		const {
+			"cus-name": cusName,
+			mobile,
+			"invoice-date": date,
+			items,
+		} = req.body;
 
-// 		if (items.length <= 0) {
-// 			return res
-// 				.status(500)
-// 				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
-// 		}
+		if (items.length <= 0) {
+			return res
+				.status(500)
+				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
+		}
 
-// 		if (!validateDate(date)) {
-// 			return res
-// 				.status(400)
-// 				.json({ message: "خطأ في التاريخ", status: "fail" });
-// 		}
+		if (!validateDate(date)) {
+			return res
+				.status(400)
+				.json({ message: "خطأ في التاريخ", status: "fail" });
+		}
 
-// 		for (const [index, item] of items.entries()) {
-// 			if (!validateItem(item)) {
-// 				return res.status(500).json({
-// 					message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`,
-// 					status: "fail",
-// 				});
-// 			}
-// 		}
+		for (const [index, item] of items.entries()) {
+			if (!validateItem(item)) {
+				return res.status(500).json({
+					message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`,
+					status: "fail",
+				});
+			}
+		}
 
-// 		const sql = `
-//             UPDATE POS SET
-//                 _customer_ = '${cusName}',
-//                 _mobile_ = '${mobile}',
-//                 _date_ = '${date}',
-//                 _items_ = '${JSON.stringify(items)}',
-//                 _config_ =
-//                     CASE
-//                     WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.update') THEN
-//                         JSON_ARRAY_APPEND(
-//                             _config_,
-//                             '$.update',
-//                             JSON_OBJECT(
-//                                 'user', '${req.obj.user.__id__}',
-//                                 'updatedAt', '${getTimestamp()}'
-//                             )
-//                         )
-//                     ELSE
-//                         JSON_SET(
-//                             _config_,
-//                             '$.update',
-//                             JSON_ARRAY(
-//                                 JSON_OBJECT(
-//                                     'user', '${req.obj.user.__id__}',
-//                                     'updatedAt', '${getTimestamp()}'
-//                                 )
-//                             )
-//                         )
-//                     END
-//             WHERE __id__ = '${req.params.id}'`;
+		const sql = `
+            UPDATE POS SET
+                _customer_ = '${cusName}',
+                _mobile_ = '${mobile}',
+                _date_ = '${date}',
+                _items_ = '${JSON.stringify(items)}',
+                _config_ =
+                    CASE
+                    WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.update') THEN
+                        JSON_ARRAY_APPEND(
+                            _config_,
+                            '$.update',
+                            JSON_OBJECT(
+                                'user', '${req.obj.user.__id__}',
+                                'updatedAt', '${getTimestamp()}'
+                            )
+                        )
+                    ELSE
+                        JSON_SET(
+                            _config_,
+                            '$.update',
+                            JSON_ARRAY(
+                                JSON_OBJECT(
+                                    'user', '${req.obj.user.__id__}',
+                                    'updatedAt', '${getTimestamp()}'
+                                )
+                            )
+                        )
+                    END
+            WHERE __id__ = '${req.params.id}'`;
 
-// 		const [result] = await pool.query(sql);
-// 		if (result.affectedRows === 0) {
-// 			return res
-// 				.status(404)
-// 				.json({ status: "fail", message: "فشل تحديث الفاتورة" });
-// 		}
-// 		res
-// 			.status(200)
-// 			.json({ status: "success", message: "تم تحديث بيانات الفاتورة بنجاح" });
-// 	} catch (error) {
-// 		console.log(error);
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		const [result] = await pool.query(sql);
+		if (result.affectedRows === 0) {
+			return res
+				.status(404)
+				.json({ status: "fail", message: "فشل تحديث الفاتورة" });
+		}
+		res
+			.status(200)
+			.json({ status: "success", message: "تم تحديث بيانات الفاتورة بنجاح" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
-// router.put("/status/:id", tokenAuth, async (req, res) => {
-// 	try {
-// 		const { status } = req.body;
+router.put("/status/:id", tokenAuth, async (req, res) => {
+	try {
+		const { status } = req.body;
 
-// 		const sql = `
-//             UPDATE POS SET
-//                 _order_status_ = ${status} ,
-//                 _config_ =
-//                     CASE
-//                     WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.updateOrderStatus') THEN
-//                         JSON_ARRAY_APPEND(
-//                             _config_,
-//                             '$.updateOrderStatus',
-//                             JSON_OBJECT(
-//                                 'user', '${req.obj.user.__id__}',
-//                                 'updatedAt', '${getTimestamp()}',
-//                                 'updateValue', '${status}'
-//                             )
-//                         )
-//                     ELSE
-//                         JSON_SET(
-//                             _config_,
-//                             '$.updateOrderStatus',
-//                             JSON_ARRAY(
-//                                 JSON_OBJECT(
-//                                     'user', '${req.obj.user.__id__}',
-//                                     'updatedAt', '${getTimestamp()}',
-//                                     'updateValue', '${status}'
-//                                 )
-//                             )
-//                         )
-//                     END
-//             WHERE __id__ = '${req.params.id}'`;
+		const sql = `
+            UPDATE POS SET
+                _order_status_ = ${status} ,
+                _config_ =
+                    CASE
+                    WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.updateOrderStatus') THEN
+                        JSON_ARRAY_APPEND(
+                            _config_,
+                            '$.updateOrderStatus',
+                            JSON_OBJECT(
+                                'user', '${req.obj.user.__id__}',
+                                'updatedAt', '${getTimestamp()}',
+                                'updateValue', '${status}'
+                            )
+                        )
+                    ELSE
+                        JSON_SET(
+                            _config_,
+                            '$.updateOrderStatus',
+                            JSON_ARRAY(
+                                JSON_OBJECT(
+                                    'user', '${req.obj.user.__id__}',
+                                    'updatedAt', '${getTimestamp()}',
+                                    'updateValue', '${status}'
+                                )
+                            )
+                        )
+                    END
+            WHERE __id__ = '${req.params.id}'`;
 
-// 		// console.log(sql);
+		// console.log(sql);
 
-// 		const [result] = await pool.query(sql);
-// 		if (result.affectedRows === 0) {
-// 			return res
-// 				.status(404)
-// 				.json({ status: "fail", message: "فشل تحديث حالة الطلب" });
-// 		}
-// 		res
-// 			.status(200)
-// 			.json({ status: "success", message: "تم تحديث بيانات حالة الطلب بنجاح" });
-// 	} catch (error) {
-// 		console.log(error);
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		const [result] = await pool.query(sql);
+		if (result.affectedRows === 0) {
+			return res
+				.status(404)
+				.json({ status: "fail", message: "فشل تحديث حالة الطلب" });
+		}
+		res
+			.status(200)
+			.json({ status: "success", message: "تم تحديث بيانات حالة الطلب بنجاح" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
-// // Delete Invoice
-// router.delete("/:id", tokenAuth, async (req, res) => {
-// 	try {
-// 		const sql = `UPDATE POS SET _status_ = 0,
-//                 _config_ =
-//                     CASE
-//                     WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.delete') THEN
-//                         JSON_ARRAY_APPEND(
-//                             _config_,
-//                             '$.delete',
-//                             JSON_OBJECT(
-//                                 'user', '${req.obj.user.__id__}',
-//                                 'deletedAt', '${getTimestamp()}'
-//                             )
-//                         )
-//                     ELSE
-//                         JSON_SET(
-//                             _config_,
-//                             '$.delete',
-//                             JSON_ARRAY(
-//                                 JSON_OBJECT(
-//                                     'user', '${req.obj.user.__id__}',
-//                                     'deletedAt', '${getTimestamp()}'
-//                                 )
-//                             )
-//                         )
-//                     END
-//             WHERE __id__ = '${req.params.id}'`;
+// Delete Invoice
+router.delete("/:id", tokenAuth, async (req, res) => {
+	try {
+		const sql = `UPDATE POS SET _status_ = 0,
+                _config_ =
+                    CASE
+                    WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.delete') THEN
+                        JSON_ARRAY_APPEND(
+                            _config_,
+                            '$.delete',
+                            JSON_OBJECT(
+                                'user', '${req.obj.user.__id__}',
+                                'deletedAt', '${getTimestamp()}'
+                            )
+                        )
+                    ELSE
+                        JSON_SET(
+                            _config_,
+                            '$.delete',
+                            JSON_ARRAY(
+                                JSON_OBJECT(
+                                    'user', '${req.obj.user.__id__}',
+                                    'deletedAt', '${getTimestamp()}'
+                                )
+                            )
+                        )
+                    END
+            WHERE __id__ = '${req.params.id}'`;
 
-// 		const [result] = await pool.query(sql);
+		const [result] = await pool.query(sql);
 
-// 		if (result.affectedRows === 0) {
-// 			return res
-// 				.status(404)
-// 				.json({ status: "fail", message: "الفاتورة غير موجودة" });
-// 		}
-// 		res
-// 			.status(200)
-// 			.json({ status: "success", message: "تم حذف الفاتورة بنجاح" });
-// 	} catch (error) {
-// 		console.log(error);
-// 		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-// 	}
-// });
+		if (result.affectedRows === 0) {
+			return res
+				.status(404)
+				.json({ status: "fail", message: "الفاتورة غير موجودة" });
+		}
+		res
+			.status(200)
+			.json({ status: "success", message: "تم حذف الفاتورة بنجاح" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
+});
 
 // module.exports = router;

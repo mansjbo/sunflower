@@ -3,9 +3,9 @@ const router = express.Router();
 const pool = require("../config/db");
 const crypto = require("crypto");
 const {
-  tokenAuth,
-  validateDate,
-  validateItem,
+	tokenAuth,
+	// validateDate,
+	// validateItem,
 } = require("../config/middleware");
 const { getTimestamp } = require("../config/lab");
 const bcrypt = require("bcrypt");
@@ -16,438 +16,324 @@ const { ObjectId } = require("mongodb");
 let db;
 
 connectToDb((err) => {
-  if (!err) {
-    db = getDb();
-  }
+	if (!err) {
+		db = getDb();
+	}
 });
 
-// New Supplies
+// const { ObjectId } = require("mongodb");
+const moment = require("moment");
+// const crypto = require("crypto");
+
+// Helper Functions
+const validateItem = async (item) => {
+	try {
+		const foundItem = await db.collection("items").findOne({
+			_id: new ObjectId(item.id),
+			"units.unit_title": item.unit,
+		});
+		return foundItem !== null;
+	} catch (error) {
+		console.error("Error validating item:", error);
+		return false;
+	}
+};
+
+const validateDate = (dateString) => {
+	return moment(dateString, "YYYY-MM-DD", true).isValid();
+};
+
+// const getTimestamp = () => new Date();
+
+// 1. Create New Supply
 router.post("/", tokenAuth, async (req, res) => {
-  try {
-    const {
-      "supplies-date": date,
-      "supplier-select": supplier,
-      items,
-    } = req.body;
+	try {
+		const {
+			"supplier-select": supplier,
+			mobile,
+			"supplies-date": date,
+			items,
+		} = req.body;
 
-    if (!validateDate(date)) {
-      return res
-        .status(400)
-        .json({ message: "خطأ في التاريخ", status: "fail" });
-    }
+		if (items.length <= 0) {
+			return res
+				.status(400)
+				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
+		}
 
-    if (!supplier || !ObjectId.isValid(supplier)) {
-      return res
-        .status(400)
-        .json({ message: "بيانات المورد غير صحيحة", status: "fail" });
-    }
+		if (!validateDate(date)) {
+			return res
+				.status(400)
+				.json({ message: "خطأ في التاريخ", status: "fail" });
+		}
 
-    if (items == undefined || items.length <= 0) {
-      return res
-        .status(400)
-        .json({ message: "يجب التأكد من الأصناف", status: "fail" });
-    }
+		for (const [index, item] of items.entries()) {
+			if (!(await validateItem(item))) {
+				return res.status(400).json({
+					message: `الصنف رقم ${index + 1} غير صحيح`,
+					status: "fail",
+				});
+			}
+		}
 
-    const id = crypto.randomBytes(16).toString("hex");
+		const today = new Date();
+		const todayStart = new Date(today.setHours(0, 0, 0, 0));
+		const todayEnd = new Date(today.setHours(23, 59, 59, 999));
 
-    const newSupply = {
-      _id: id,
-      date: date,
-      supplier: new ObjectId(supplier), // This is now just the ObjectId
-      items: items,
-      createdAt: getTimestamp(),
-      createdBy: req.obj.user.__id__,
-      status: 1,
-    };
+		const count = await db.collection("supplies").countDocuments({
+			createdAt: { $gte: todayStart, $lt: todayEnd },
+		});
 
-    const result = await db.collection("supplies").insertOne(newSupply);
-    res
-      .status(201)
-      .json({ message: "تم حفظ البيانات بنجاح", status: "success" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-  }
+		const code = (count + 1).toString().padStart(6, "0");
+		const id = crypto.randomBytes(10).toString("hex");
+
+		const newSupply = {
+			_id: new ObjectId(),
+			code,
+			date: new Date(date),
+			supplier: new ObjectId(supplier),
+			items,
+			total: items.reduce(
+				(sum, item) => sum + (item.price * item.quantity - item.discount),
+				0
+			),
+			status: 1,
+			createdAt: getTimestamp(),
+			createdBy: req.obj.user.__id__,
+		};
+
+		await db.collection("supplies").insertOne(newSupply);
+
+		res.status(201).json({
+			message: "تم إنشاء سجل التوريد بنجاح",
+			status: "success",
+			data: { id: newSupply._id, code: newSupply.code },
+		});
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
 });
 
-// Supplies List
+// 2. Get Supplies List
 router.get("/", tokenAuth, async (req, res) => {
-  try {
-    const supplies = await db
-      .collection("supplies")
-      .aggregate([
-        {
-          $match: { status: 1 }, // Only active supplies
-        },
-        {
-          $lookup: {
-            from: "supplier",
-            localField: "supplier",
-            foreignField: "_id",
-            as: "supplierData",
-          },
-        },
-        {
-          $unwind: "$supplierData", // Convert the array from lookup to object
-        },
-        {
-          $addFields: {
-            total: {
-              $sum: "$items.amount", // Calculate total from items array
-            },
-            "supplier.name": "$supplierData.name", // Get supplier name
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            date: 1,
-            supplier: 1,
-            "supplier.name": 1,
-            items: 1,
-            total: 1,
-            createdAt: 1,
-          },
-        },
-        {
-          $sort: { createdAt: -1 }, // Sort by newest first
-        },
-      ])
-      .toArray();
+	try {
+		const page = parseInt(req.query.page) || 1;
+		const limit = parseInt(req.query.limit) || 10;
+		const txt = req.query.txt || "";
+		const skip = (page - 1) * limit;
 
-    res.status(200).json({
-      message: "تم جلب البيانات بنجاح",
-      status: "success",
-      data: supplies,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-  }
+		const arabicRegex = txt.replace(/[إأآ]/g, "ا").replace(/[ىئ]/g, "ي");
+		const regex = new RegExp(arabicRegex, "i");
+
+		const countPipeline = [
+			{
+				$match: {
+					$or: [
+						{ code: { $regex: regex } },
+						{ customer: { $regex: regex } },
+						{ mobile: { $regex: regex } },
+						{ total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
+					],
+					status: 1,
+				},
+			},
+			{ $count: "total" },
+		];
+
+		const countResult = await db
+			.collection("supplies")
+			.aggregate(countPipeline)
+			.toArray();
+		const total = countResult[0]?.total || 0;
+		const pages_count = Math.ceil(total / limit);
+
+		const supplies = await db
+			.collection("supplies")
+			.aggregate([
+				{
+					$match: {
+						$or: [
+							{ code: { $regex: regex } },
+							{ supplier: { $regex: regex } },
+							{ total: isNaN(txt) ? { $regex: regex } : parseFloat(txt) },
+						],
+						status: 1,
+					},
+				},
+				{
+					$project: {
+						_id: 1,
+						code: 1,
+						date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+						supplier: 1,
+						total: 1,
+					},
+				},
+				{ $skip: skip },
+				{ $limit: limit },
+			])
+			.toArray();
+
+		res.status(200).json({
+			data: supplies,
+			meta: { pages_count, results_count: total },
+			status: "success",
+		});
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
 });
 
-// Get Single Supply
+// 3. Get Supply Details
 router.get("/:id", tokenAuth, async (req, res) => {
-  try {
-    const supply = await db.collection("supplies").findOne({
-      _id: req.params.id,
-      "config.status": 1,
-    });
+	try {
+		const supply = await db.collection("supplies").findOne({
+			_id: new ObjectId(req.params.id),
+			status: 1,
+		});
 
-    if (supply) {
-      return res.status(200).json({ data: supply, status: "success" });
-    } else {
-      return res
-        .status(404)
-        .json({ data: null, message: "لا يوجد بيانات متاحة", status: "fail" });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-  }
+		if (!supply) {
+			return res.status(404).json({
+				message: "لا يوجد بيانات متاحة",
+				status: "fail",
+			});
+		}
+
+		// Format the date to YYYY-MM-DD
+		const formattedDate = moment(supply.date).format("YYYY-MM-DD");
+
+		res.status(200).json({
+			data: {
+				basics: {
+					_id: supply._id,
+					code: supply.code,
+					date: formattedDate, // Use the formatted date here
+					supplier: supply.supplier,
+					total: supply.total,
+				},
+				details: supply.items.map((item) => ({
+					id: item.id,
+					title: item.title,
+					unit: item.unit,
+					price: item.price,
+					discount: item.discount,
+					quantity: item.quantity,
+				})),
+			},
+			status: "success",
+		});
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({
+			message: "خطأ، فشل العملية",
+			status: "fail",
+		});
+	}
 });
 
-// Update Supply
+// 4. Update Supply
 router.put("/:id", tokenAuth, async (req, res) => {
-  console.log(req.body);
-  try {
-    const {
-      "supplier-select": supplier,
-      "supplies-date": date,
-      items,
-    } = req.body;
+	try {
+		const {
+			"supplier-select": supplier,
+			mobile,
+			"supplies-date": date,
+			items,
+		} = req.body;
 
-    if (items.length <= 0) {
-      return res
-        .status(400)
-        .json({ message: "لا يوجد أصناف كافية", status: "fail" });
-    }
+		if (items.length <= 0) {
+			return res
+				.status(400)
+				.json({ message: "لا يوجد أصناف كافية", status: "fail" });
+		}
 
-    if (!validateDate(date)) {
-      return res
-        .status(400)
-        .json({ message: "خطأ في التاريخ", status: "fail" });
-    }
+		if (!validateDate(date)) {
+			return res
+				.status(400)
+				.json({ message: "خطأ في التاريخ", status: "fail" });
+		}
 
-    for (const [index, item] of items.entries()) {
-      if (!validateItem(item)) {
-        return res.status(400).json({
-          message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`,
-          status: "fail",
-        });
-      }
-    }
+		for (const [index, item] of items.entries()) {
+			if (!(await validateItem(item))) {
+				return res.status(400).json({
+					message: `الصنف رقم ${index + 1} غير صحيح`,
+					status: "fail",
+				});
+			}
+		}
 
-    const updateObj = {
-      $set: {
-        supplier: supplier,
-        date: date,
-        items: items,
-      },
-      $push: {
-        "config.update": {
-          user: req.obj.user._id,
-          updatedAt: getTimestamp(),
-        },
-      },
-    };
+		const updateRecord = {
+			user: req.obj.user.__id__,
+			updatedAt: getTimestamp(),
+		};
 
-    const result = await db
-      .collection("supplies")
-      .updateOne({ _id: req.params.id }, updateObj);
+		const result = await db.collection("supplies").updateOne(
+			{ _id: new ObjectId(req.params.id) },
+			{
+				$set: {
+					supplier: supplier,
+					date: new Date(date),
+					items,
+					total: items.reduce(
+						(sum, item) => sum + (item.price * item.quantity - item.discount),
+						0
+					),
+				},
+				$push: {
+					updates: updateRecord,
+				},
+			}
+		);
 
-    if (result.matchedCount === 0) {
-      return res
-        .status(404)
-        .json({ status: "fail", message: "فشل تحديث الفاتورة" });
-    }
-    res
-      .status(200)
-      .json({ status: "success", message: "تم تحديث بيانات الفاتورة بنجاح" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-  }
+		if (result.matchedCount === 0) {
+			return res
+				.status(404)
+				.json({ status: "fail", message: "سجل التوريد غير موجود" });
+		}
+
+		res
+			.status(200)
+			.json({ status: "success", message: "تم تحديث سجل التوريد بنجاح" });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
 });
 
-// Delete Supply (soft delete)
+// 6. Delete Supply
 router.delete("/:id", tokenAuth, async (req, res) => {
-  try {
-    const result = await db.collection("supplies").updateOne(
-      { _id: req.params.id },
-      {
-        $set: { "config.status": 0 },
-        $push: {
-          "config.delete": {
-            user: req.obj.user._id,
-            deletedAt: getTimestamp(),
-          },
-        },
-      }
-    );
+	try {
+		const deleteRecord = {
+			user: req.obj.user.__id__,
+			deletedAt: getTimestamp(),
+		};
 
-    if (result.matchedCount === 0) {
-      return res
-        .status(404)
-        .json({ status: "fail", message: "الفاتورة غير موجودة" });
-    }
-    res
-      .status(200)
-      .json({ status: "success", message: "تم حذف الفاتورة بنجاح" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
-  }
+		const result = await db.collection("supplies").updateOne(
+			{ _id: new ObjectId(req.params.id) },
+			{
+				$set: { status: 0 },
+				$push: {
+					deletes: deleteRecord,
+				},
+			}
+		);
+
+		if (result.matchedCount === 0) {
+			return res
+				.status(404)
+				.json({ status: "fail", message: "سجل التوريد غير موجود" });
+		}
+
+		res
+			.status(200)
+			.json({ status: "success", message: "تم حذف سجل التوريد بنجاح" });
+	} catch (error) {
+		console.error(error);
+		res.status(500).json({ message: "خطأ، فشل العملية", status: "fail" });
+	}
 });
 
-// Modified paginateData function for MongoDB
-function paginateData(data, page, limit, total) {
-  const startIndex = (page - 1) * limit;
-  const endIndex = page * limit;
-
-  const result = {};
-  result.total = total;
-  result.pages = Math.ceil(total / limit);
-
-  if (endIndex < total) {
-    result.next = {
-      page: page + 1,
-      limit: limit,
-    };
-  }
-
-  if (startIndex > 0) {
-    result.previous = {
-      page: page - 1,
-      limit: limit,
-    };
-  }
-
-  result.data = data;
-  return { data: result.data, meta: { pagination: result } };
-}
-
-// // New Supplies
-// router.post('/', tokenAuth, async(req, res)=>{
-
-//     try {
-//         console.log(req.body);
-//         const {"supplies-date": date, "supplier-select":supplier, items}= req.body
-
-//         if (!validateDate(date)) {
-//             return res.status(400).json({message: "خطأ في التاريخ", status: "fail"})
-//         }
-
-//         if (supplier == undefined || supplier.length < 10) {
-//             return res.status(400).json({message: "بيانات المورد غير صحيحة", status: "fail"})
-//         }
-
-//         if (items == undefined || items.length <= 0 ) {
-//             return res.status(400).json({message: "يجب التأكد من الأصناف", status:"fail"})
-//         }
-
-//         const id = crypto.randomBytes(16).toString("hex");
-
-//         const sql = `
-//             INSERT INTO SUPPLY (__id__, _date_, _supplier_, _items_, _config_) VALUES
-//             ('${id}', '${date}', '${supplier}', '${JSON.stringify(items)}', '${JSON.stringify({createdAt: getTimestamp(), createdBy: req.obj.user.__id__})}')
-//         `
-//         const [newSupply] = await pool.query(sql)
-//         res.status(201).json({message: "تم حفظ البيانات بنجاح", status: "success"})
-
-//     } catch (error) {
-//         res.status(500).json({ message: 'خطأ، فشل العملية', status: 'fail' });
-//     }
-// })
-
-// // Supplies List
-// router.get("/", tokenAuth, async(req, res)=>{
-//     try {
-//         const page = parseInt(req.query.page) || 1
-//         const limit = parseInt(req.query.limit) || 10
-//         const txt = req.query.txt || ""
-//         const sql = (`SELECT i.__id__, DATE_FORMAT(i._date_, '%Y-%m-%d') AS _date_, i._title_, i.total FROM SUPPLIES i
-
-//             WHERE (
-//             REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._date_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(i._title_, 'إ', 'ا'), 'أ', 'ا'), 'آ', 'ا'), 'ى', 'ي'), 'ئ', 'ي') LIKE '%${txt}%'
-//             OR i.total = '${txt}'
-//             )
-//            `);
-
-//         const [invoices] = await pool.query(sql)
-//         if (invoices.length > 0) {
-
-//             const data = paginateData(invoices, page, limit)
-//             return res.status(201).json({...data, status: "success"})
-//         }else{
-//             return res.status(200).json({data:[], meta:{}, message: "لا يوجد بيانات متاحة", status: "fail"})
-//         }
-//     } catch (error) {
-//         console.log(error);
-//         res.status(500).json({ message: 'خطأ، فشل العملية', status: 'fail' });
-//     }
-// })
-
-// // Supplies List
-// router.get("/:id", tokenAuth, async(req, res)=>{
-//     try {
-
-//         const sql = (`SELECT i.__id__, DATE_FORMAT(i._date_, '%Y-%m-%d') AS _date_, i._title_, i._items_, i._supplier_ FROM SUPPLIES i WHERE i.__id__ = '${req.params.id}'`);
-
-//         const [supply] = await pool.query(sql)
-//         if (supply.length > 0) {
-//             return res.status(201).json({data: supply[0], status: "success"})
-//         }else{
-//             return res.status(200).json({data:[], meta:{}, message: "لا يوجد بيانات متاحة", status: "fail"})
-//         }
-//     } catch (error) {
-//         console.log(error);
-//         res.status(500).json({ message: 'خطأ، فشل العملية', status: 'fail' });
-//     }
-// })
-
-// router.put("/:id", tokenAuth,async(req, res)=>{
-//     console.log(req.body);
-//     try {
-//         const {"supplier-select":supplier,"supplies-date":date, items} = req.body
-
-//         if (items.length <= 0 ) {
-//             return res.status(500).json({message: "لا يوجد أصناف كافية", status: "fail"})
-//         }
-
-//         if (!validateDate(date)) {
-//             return res.status(400).json({message: "خطأ في التاريخ", status: "fail"})
-//         }
-
-//         for (const [index, item] of items.entries()) {
-//             if (!validateItem(item)) {
-//                 return res.status(500).json({message: `الصنف رقم ${index} غير صحيح، يرجى التأكد من البيانات المدخلية`, status: "fail"})
-//             }
-//         }
-
-//         const sql = `
-//             UPDATE SUPPLY SET
-//                 _supplier_ = '${supplier}',
-//                 _date_ = '${date}',
-//                 _items_ = '${JSON.stringify(items)}',
-//                 _config_ =
-//                     CASE
-//                     WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.update') THEN
-//                         JSON_ARRAY_APPEND(
-//                             _config_,
-//                             '$.update',
-//                             JSON_OBJECT(
-//                                 'user', '${req.obj.user.__id__}',
-//                                 'updatedAt', '${getTimestamp()}'
-//                             )
-//                         )
-//                     ELSE
-//                         JSON_SET(
-//                             _config_,
-//                             '$.update',
-//                             JSON_ARRAY(
-//                                 JSON_OBJECT(
-//                                     'user', '${req.obj.user.__id__}',
-//                                     'updatedAt', '${getTimestamp()}'
-//                                 )
-//                             )
-//                         )
-//                     END
-//             WHERE __id__ = '${req.params.id}'`
-
-//         const [result] = await pool.query(sql)
-//         if (result.affectedRows === 0) {
-//             return res.status(404).json({ status: 'fail', message: 'فشل تحديث الفاتورة' });
-//         }
-//         res.status(200).json({ status: 'success', message: 'تم تحديث بيانات الفاتورة بنجاح' });
-//     } catch (error) {
-//         console.log(error);
-//         res.status(500).json({ message: 'خطأ، فشل العملية', status: 'fail' });
-//     }
-// })
-
-// // Delete Invoice
-// router.delete("/:id", tokenAuth, async(req, res)=>{
-//     try {
-//         const sql =
-//             `UPDATE SUPPLY SET _status_ = 0,
-//                 _config_ =
-//                     CASE
-//                     WHEN JSON_CONTAINS_PATH(_config_, 'one', '$.delete') THEN
-//                         JSON_ARRAY_APPEND(
-//                             _config_,
-//                             '$.delete',
-//                             JSON_OBJECT(
-//                                 'user', '${req.obj.user.__id__}',
-//                                 'deletedAt', '${getTimestamp()}'
-//                             )
-//                         )
-//                     ELSE
-//                         JSON_SET(
-//                             _config_,
-//                             '$.delete',
-//                             JSON_ARRAY(
-//                                 JSON_OBJECT(
-//                                     'user', '${req.obj.user.__id__}',
-//                                     'deletedAt', '${getTimestamp()}'
-//                                 )
-//                             )
-//                         )
-//                     END
-//             WHERE __id__ = '${req.params.id}'`
-
-//         const [result] = await pool.query(sql)
-
-//         if (result.affectedRows === 0) {
-//             return res.status(404).json({ status: 'fail', message: 'الفاتورة غير موجودة' });
-//         }
-//         res.status(200).json({ status: 'success', message: 'تم حذف الفاتورة بنجاح' });
-//     } catch (error) {
-//         console.log(error);
-//         res.status(500).json({ message: 'خطأ، فشل العملية', status: 'fail' });
-//     }
-// })
-
-// router.get("")
+module.exports = router;
 module.exports = router;
