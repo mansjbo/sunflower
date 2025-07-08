@@ -1,3 +1,5 @@
 node_modules
 db.txt
 request.rest
+# Local Netlify folder
+.netlify
